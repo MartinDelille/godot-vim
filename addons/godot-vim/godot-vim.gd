@@ -139,18 +139,18 @@ var the_key_map : Array[Dictionary] = [
 
 
 # The list of command keys we handle (other command keys will be handled by Godot)
-var command_keys_white_list : Dictionary = {
-    "Escape": 1,
-    "Enter": 1,
-    # "Ctrl+F": 1,  # Uncomment if you would like move-forward by page function instead of search on slash
-    "Ctrl+B": 1,
-    "Ctrl+U": 1,
-    "Ctrl+D": 1,
-    "Ctrl+O": 1,
-    "Ctrl+I": 1,
-    "Ctrl+R": 1,
-    "Ctrl+BracketRight": 1,
-    "Ctrl+BracketLeft": 1,
+var handle_command_keys : Dictionary = {
+    "Escape": true,
+    "Enter": true,
+    "Ctrl+F": false,
+    "Ctrl+B": true,
+    "Ctrl+U": true,
+    "Ctrl+D": true,
+    "Ctrl+O": true,
+    "Ctrl+I": true,
+    "Ctrl+R": true,
+    "Ctrl+BracketRight": true,
+    "Ctrl+BracketLeft": true,
 }
 
 
@@ -162,11 +162,17 @@ var disabled := false
 
 
 func _enter_tree() -> void:
-    if FileAccess.file_exists("res://.novim"):
-        disabled = true
-        return
-    
     editor_interface = get_editor_interface()
+    
+    # Init editor settings
+    var editor_settings := editor_interface.get_editor_settings()
+    if not editor_settings.has_setting("vim/enabled"):
+        editor_settings.set_setting("vim/enabled", true)
+    
+    for key in handle_command_keys:
+        if not editor_settings.has_setting("vim/handle_" + key):
+            editor_settings.set_setting("vim/handle_" + key, handle_command_keys[key])
+
     var script_editor = editor_interface.get_script_editor()
     script_editor.editor_script_changed.connect(on_script_changed)
     script_editor.script_close.connect(on_script_closed)
@@ -202,7 +208,7 @@ func _input(event) -> void:
         print("Key: %s Buffer: %s" % [key_code, the_vim.current.input_state.key_codes()])
 
     # We only process keys in the white list or it is ASCII char or SHIFT+ASCII char
-    if key.get_keycode_with_modifiers() & (~KEY_MASK_SHIFT) > 128 and key_code not in command_keys_white_list:
+    if key.get_keycode_with_modifiers() & (~KEY_MASK_SHIFT) > 128 and not handle_command_keys.get(key_code, false):
         return
 
     if the_dispatcher.dispatch(key, the_vim, the_ed):
@@ -210,6 +216,9 @@ func _input(event) -> void:
 
 
 func on_script_changed(s: Script) -> void:
+    if disabled:
+        return
+
     the_vim.set_current_session(s, the_ed)
 
     var script_editor = editor_interface.get_script_editor()
@@ -234,12 +243,24 @@ func on_settings_changed() -> void:
     var settings := editor_interface.get_editor_settings()
     the_ed.notify_settings_changed(settings)
 
+    for key in handle_command_keys:
+        handle_command_keys[key] = settings.get_setting("vim/handle_" + key)
+    
+    disabled = not settings.get_setting("vim/enabled")
+    the_ed.set_block_caret(not disabled)
+
 
 func on_caret_changed()-> void:
+    if disabled:
+        return
+        
     the_ed.set_block_caret(not the_vim.current.insert_mode)
 
 
 func on_lines_edited_from(from: int, to: int) -> void:
+    if disabled:
+        return
+        
     the_vim.current.jump_list.on_lines_edited(from, to)
     the_vim.current.text_change_number += 1
     the_vim.current.bookmark_manager.on_lines_edited(from, to)
@@ -1313,6 +1334,9 @@ class EditorAdaptor:
         code_editor.symbol_lookup.emit(symbol, curr_line(), curr_column())
 
     func set_block_caret(block: bool) -> void:
+        if not code_editor:
+            return
+
         if block:
             if curr_column() == last_column() + 1:
                 code_editor.caret_type = TextEdit.CARET_TYPE_LINE
