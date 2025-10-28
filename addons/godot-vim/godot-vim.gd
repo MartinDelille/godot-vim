@@ -201,23 +201,9 @@ func _process(_delta: float) -> void:
 
 
 func _setup_shader_editor() -> void:
-    # The shader editor is part of the main editor screen
-    # We need to search more broadly for it
-    var base_control = editor_interface.get_base_control()
-    
-    # Try multiple approaches to find the shader editor
-    # Method 1: Search in main screen
     var main_screen = editor_interface.get_editor_main_screen()
     shader_editor_plugin = find_first_node_of_type(main_screen, "TextShaderEditor")
     
-    # Method 2: Search in base control
-    if not shader_editor_plugin:
-        shader_editor_plugin = find_first_node_of_type(base_control, "TextShaderEditor")
-    
-    # Method 3: Search for ShaderTextEditor (alternative class name)
-    if not shader_editor_plugin:
-        shader_editor_plugin = find_first_node_of_type(base_control, "ShaderTextEditor")
-
 
 func _update_shader_editor() -> void:
     # Find the shader code editor
